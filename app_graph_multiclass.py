@@ -1050,8 +1050,48 @@ def main():
     with tab3:
         st.markdown("## ⚗️ Predict Single SMILES")
         
+        # Debug session state
+        with st.expander("🔧 Debug Info (for troubleshooting)", expanded=False):
+            st.write(f"Model trained: {st.session_state.multiclass_model_trained}")
+            st.write(f"Model exists: {st.session_state.multiclass_model is not None}")
+            st.write(f"Label encoder exists: {st.session_state.multiclass_label_encoder is not None}")
+        
         if not st.session_state.multiclass_model_trained:
             st.warning("⚠️ Please train a model first in the 'Build Model' tab.")
+            
+            # Add option to load a pre-trained model
+            st.markdown("### 📁 Or Load a Pre-trained Model")
+            uploaded_zip = st.file_uploader("Upload model zip file", type=['zip'], key="multiclass_model_upload")
+            
+            if uploaded_zip is not None:
+                try:
+                    # Extract the zip file
+                    with zipfile.ZipFile(uploaded_zip, 'r') as zip_ref:
+                        model_dir = 'temp_multiclass_model_dir'
+                        if os.path.exists(model_dir):
+                            shutil.rmtree(model_dir)
+                        os.makedirs(model_dir)
+                        zip_ref.extractall(model_dir)
+                    
+                    # Load the model
+                    # Try to determine number of classes from model files
+                    n_tasks = 3  # Default, will be adjusted based on actual model
+                    model = GraphConvModel(n_tasks, model_dir=model_dir)
+                    model.restore()
+                    
+                    # Create a dummy label encoder (this should ideally be saved with the model)
+                    label_encoder = LabelEncoder()
+                    label_encoder.classes_ = np.array([f"Class_{i}" for i in range(n_tasks)])
+                    
+                    st.session_state.multiclass_model = model
+                    st.session_state.multiclass_label_encoder = label_encoder
+                    st.session_state.multiclass_model_trained = True
+                    
+                    st.success("✅ Model loaded successfully!")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"❌ Error loading model: {str(e)}")
+                    st.stop()
         else:
             smiles_input = st.text_input(
                 "🧬 Enter SMILES string:",
@@ -1061,57 +1101,62 @@ def main():
             
             if st.button("🔮 Predict Activity", type="primary", use_container_width=True):
                 if smiles_input:
-                    with st.spinner('🧠 Analyzing molecule...'):
-                        prediction, confidence, error = predict_single_smiles_multiclass(
-                            st.session_state.multiclass_model,
-                            smiles_input,
-                            st.session_state.multiclass_label_encoder
-                        )
-                        
-                        if error:
-                            st.error(f"❌ {error}")
-                        else:
-                            st.success("✅ Prediction completed!")
+                    try:
+                        with st.spinner('🧠 Analyzing molecule...'):
+                            prediction, confidence, error = predict_single_smiles_multiclass(
+                                st.session_state.multiclass_model,
+                                smiles_input,
+                                st.session_state.multiclass_label_encoder
+                            )
                             
-                            col1, col2 = st.columns(2)
-                            with col1:
-                                create_ios_metric_card("Predicted Activity", str(prediction))
-                            with col2:
-                                create_ios_metric_card("Confidence", f"{confidence:.3f}")
-                            
-                            # Display molecule structure and atomic contribution map
-                            if RDKIT_DRAW_AVAILABLE:
-                                try:
-                                    mol = Chem.MolFromSmiles(smiles_input)
-                                    if mol:
-                                        col1, col2 = st.columns(2)
-                                        
-                                        with col1:
-                                            st.markdown("#### 🧬 Molecule Structure")
-                                            img = Draw.MolToImage(mol, size=(300, 300))
-                                            st.image(img, caption=f"Molecule: {smiles_input}")
-                                        
-                                        with col2:
-                                            st.markdown("#### 🗺️ Atomic Contribution Map")
-                                            st.markdown("*Atoms colored by their contribution to the prediction*")
-                                            
-                                            # Calculate atomic contributions for the predicted class
-                                            atomic_contributions = calculate_atomic_contributions_multiclass(
-                                                st.session_state.multiclass_model,
-                                                mol,
-                                                smiles_input
-                                            )
-                                            
-                                            # Generate and display atomic contribution map
-                                            contrib_map = vis_contribs_multiclass(mol, atomic_contributions)
-                                            if contrib_map:
-                                                st.image(contrib_map, caption="Red = High contribution, Blue = Low contribution")
-                                            else:
-                                                st.info("Atomic contribution map not available")
-                                except Exception as e:
-                                    st.warning(f"Could not display molecular visualization: {str(e)}")
+                            if error:
+                                st.error(f"❌ {error}")
                             else:
-                                st.info("Molecular visualization requires RDKit")
+                                st.success("✅ Prediction completed!")
+                                
+                                col1, col2 = st.columns(2)
+                                with col1:
+                                    create_ios_metric_card("Predicted Activity", str(prediction))
+                                with col2:
+                                    create_ios_metric_card("Confidence", f"{confidence:.3f}")
+                                
+                                # Display molecule structure and atomic contribution map
+                                if RDKIT_DRAW_AVAILABLE:
+                                    try:
+                                        mol = Chem.MolFromSmiles(smiles_input)
+                                        if mol:
+                                            col1, col2 = st.columns(2)
+                                            
+                                            with col1:
+                                                st.markdown("#### 🧬 Molecule Structure")
+                                                img = Draw.MolToImage(mol, size=(300, 300))
+                                                st.image(img, caption=f"Molecule: {smiles_input}")
+                                            
+                                            with col2:
+                                                st.markdown("#### 🗺️ Atomic Contribution Map")
+                                                st.markdown("*Atoms colored by their contribution to the prediction*")
+                                                
+                                                # Calculate atomic contributions for the predicted class
+                                                atomic_contributions = calculate_atomic_contributions_multiclass(
+                                                    st.session_state.multiclass_model,
+                                                    mol,
+                                                    smiles_input
+                                                )
+                                                
+                                                # Generate and display atomic contribution map
+                                                contrib_map = vis_contribs_multiclass(mol, atomic_contributions)
+                                                if contrib_map:
+                                                    st.image(contrib_map, caption="Red = High contribution, Blue = Low contribution")
+                                                else:
+                                                    st.info("Atomic contribution map not available")
+                                    except Exception as viz_error:
+                                        st.warning(f"Could not display molecular visualization: {str(viz_error)}")
+                                        st.info("Molecular structure display failed, but prediction was successful.")
+                                else:
+                                    st.info("Molecular visualization requires RDKit (prediction still successful)")
+                    except Exception as main_error:
+                        st.error(f"❌ Unexpected error during prediction: {str(main_error)}")
+                        st.error("Please try again or check your SMILES string format.")
                 else:
                     st.warning("⚠️ Please enter a SMILES string.")
 

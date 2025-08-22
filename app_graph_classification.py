@@ -1534,19 +1534,18 @@ def main():
                             probability = predictions_whole['Probability_Class_1'].iloc[0]
                             prediction = "Active" if probability > 0.5 else "Inactive"
                             
-                            # Calculate atomic contributions if requested
+                            # Always calculate atomic contributions for batch prediction
                             atomic_contributions = None
                             contrib_map = None
-                            if include_contrib_maps:
-                                try:
-                                    mol = Chem.MolFromSmiles(standardized_smiles)
-                                    if mol and mol.GetNumHeavyAtoms() > 0:
-                                        atomic_contributions = calculate_atomic_contributions(
-                                            st.session_state.loaded_model, mol, standardized_smiles
-                                        )
-                                        contrib_map = vis_contribs(mol, atomic_contributions)
-                                except Exception as contrib_error:
-                                    st.warning(f"Could not generate contribution map for {smiles}: {str(contrib_error)}")
+                            try:
+                                mol = Chem.MolFromSmiles(standardized_smiles)
+                                if mol and mol.GetNumHeavyAtoms() > 0:
+                                    atomic_contributions = calculate_atomic_contributions(
+                                        st.session_state.loaded_model, mol, standardized_smiles
+                                    )
+                                    contrib_map = vis_contribs(mol, atomic_contributions)
+                            except Exception as contrib_error:
+                                st.warning(f"Could not generate contribution map for {smiles}: {str(contrib_error)}")
                             
                             predictions.append({
                                 "Original_SMILES": smiles,
@@ -1571,7 +1570,8 @@ def main():
                                             st.image(img, caption="Structure", width=150)
                                     
                                     with col2:
-                                        st.image(contrib_map, caption="Contribution Map", width=150)
+                                        st.image(contrib_map, caption="Atomic Contribution Map", width=150)
+                                        st.caption("🔴 Red = High contribution | ⚪ White = Neutral | 🔵 Blue = Low contribution")
                                     
                                     with col3:
                                         st.metric("Prediction", prediction)
@@ -1583,27 +1583,79 @@ def main():
                                             st.write("**Top Contributors:**")
                                             for i, atom_idx in enumerate(contrib_indices):
                                                 atom_idx = int(atom_idx)
-                                                atom_symbol = mol.GetAtomWithIdx(atom_idx).GetSymbol()
-                                                contrib_score = atomic_contributions[atom_idx]
-                                                st.write(f"{i+1}. Atom {atom_idx} ({atom_symbol}): {contrib_score:.3f}")
+                                                if atom_idx < mol.GetNumHeavyAtoms():
+                                                    atom_symbol = mol.GetAtomWithIdx(atom_idx).GetSymbol()
+                                                    contrib_score = atomic_contributions[atom_idx]
+                                                    st.write(f"{i+1}. Atom {atom_idx} ({atom_symbol}): {contrib_score:.3f}")
+                                    
+                                    st.divider()
+                                elif include_contrib_maps and contrib_map is None:
+                                    # Show that contribution map generation failed
+                                    st.markdown(f"**{idx + 1}.** {smiles}")
+                                    if smiles != standardized_smiles:
+                                        st.caption(f"Standardized: {standardized_smiles}")
+                                    
+                                    col1, col2, col3 = st.columns([1, 1, 1])
+                                    with col1:
+                                        mol = Chem.MolFromSmiles(standardized_smiles)
+                                        if mol:
+                                            img = Chem.Draw.MolToImage(mol, size=(150, 150))
+                                            st.image(img, caption="Structure", width=150)
+                                    
+                                    with col2:
+                                        st.info("⚠️ Contribution map could not be generated for this molecule")
+                                    
+                                    with col3:
+                                        st.metric("Prediction", prediction)
+                                        st.metric("Probability", f"{probability:.3f}")
                                     
                                     st.divider()
                                 else:
-                                    # Compact layout without contribution map
-                                    col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
-                                    with col1:
-                                        st.write(f"**{idx + 1}.** {smiles}")
-                                        if smiles != standardized_smiles:
-                                            st.caption(f"Standardized: {standardized_smiles}")
-                                    with col2:
-                                        mol = Chem.MolFromSmiles(standardized_smiles)
-                                        if mol:
-                                            img = Chem.Draw.MolToImage(mol, size=(100, 100))
-                                            st.image(img, width=100)
-                                    with col3:
-                                        st.metric("Prediction", prediction)
-                                    with col4:
-                                        st.metric("Probability", f"{probability:.3f}")
+                                    # Enhanced compact layout with contribution map
+                                    st.markdown(f"**{idx + 1}.** {smiles}")
+                                    if smiles != standardized_smiles:
+                                        st.caption(f"Standardized: {standardized_smiles}")
+                                    
+                                    if include_contrib_maps and contrib_map is not None:
+                                        # Show contribution map in compact mode
+                                        col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
+                                        with col1:
+                                            mol = Chem.MolFromSmiles(standardized_smiles)
+                                            if mol:
+                                                # Show both structure and contribution map side by side
+                                                subcol1, subcol2 = st.columns([1, 1])
+                                                with subcol1:
+                                                    img = Chem.Draw.MolToImage(mol, size=(100, 100))
+                                                    st.image(img, caption="Structure", width=100)
+                                                with subcol2:
+                                                    st.image(contrib_map, caption="Contributions", width=100)
+                                        with col2:
+                                            st.metric("Prediction", prediction)
+                                        with col3:
+                                            st.metric("Probability", f"{probability:.3f}")
+                                        with col4:
+                                            # Show top contributing atom
+                                            if atomic_contributions is not None and len(atomic_contributions) > 0:
+                                                top_atom_idx = int(np.argmax(atomic_contributions))
+                                                top_contrib = atomic_contributions[top_atom_idx]
+                                                atom_symbol = mol.GetAtomWithIdx(top_atom_idx).GetSymbol()
+                                                st.metric("Top Atom", f"{atom_symbol} ({top_contrib:.3f})")
+                                    else:
+                                        # Basic compact layout without contribution map
+                                        col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
+                                        with col1:
+                                            st.write(f"**{idx + 1}.** {smiles}")
+                                            if smiles != standardized_smiles:
+                                                st.caption(f"Standardized: {standardized_smiles}")
+                                        with col2:
+                                            mol = Chem.MolFromSmiles(standardized_smiles)
+                                            if mol:
+                                                img = Chem.Draw.MolToImage(mol, size=(100, 100))
+                                                st.image(img, width=100)
+                                        with col3:
+                                            st.metric("Prediction", prediction)
+                                        with col4:
+                                            st.metric("Probability", f"{probability:.3f}")
 
                             # Clean up
                             if os.path.exists(sdf_path):
