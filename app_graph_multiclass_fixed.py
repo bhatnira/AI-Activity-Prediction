@@ -29,16 +29,16 @@ except ImportError:
         def GetSimilarityMapFromWeights(*args, **kwargs):
             return None
 
-# Import DeepChem and related libraries
 import deepchem as dc
 from deepchem.feat import ConvMolFeaturizer
 from deepchem.models import GraphConvModel
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, f1_score, classification_report, confusion_matrix, precision_score, recall_score, roc_auc_score
 from sklearn.preprocessing import LabelEncoder
-
-# Import TensorFlow with Python 3.10 compatibility
 import tensorflow as tf
+import time
+import threading
+import queue
 
 # Configure matplotlib and RDKit for headless mode
 os.environ['MPLBACKEND'] = 'Agg'
@@ -1192,6 +1192,31 @@ def main():
                                     with col3:
                                         avg_confidence = valid_predictions['Confidence'].mean()
                                         create_ios_metric_card("Avg Confidence", f"{avg_confidence:.3f}")
+                                    
+                                    # Class distribution
+                                    if len(valid_predictions) > 0:
+                                        st.markdown("#### 🎯 Class Distribution")
+                                        class_counts = valid_predictions['Predicted_Activity'].value_counts()
+                                        
+                                        fig, ax = plt.subplots(figsize=(8, 5))
+                                        colors = ['#007AFF', '#5856D6', '#34C759', '#FF9500', '#FF3B30']
+                                        bars = ax.bar(class_counts.index, class_counts.values, 
+                                                     color=colors[:len(class_counts)])
+                                        ax.set_xlabel('Predicted Class', fontsize=11, fontweight='bold')
+                                        ax.set_ylabel('Count', fontsize=11, fontweight='bold')
+                                        ax.set_title('Distribution of Predicted Classes', fontsize=12, fontweight='bold')
+                                        
+                                        # Add value labels on bars
+                                        for bar in bars:
+                                            height = bar.get_height()
+                                            ax.text(bar.get_x() + bar.get_width()/2., height,
+                                                   f'{int(height)}',
+                                                   ha='center', va='bottom', fontweight='bold')
+                                        
+                                        plt.xticks(rotation=45)
+                                        plt.tight_layout()
+                                        st.pyplot(fig)
+                                        plt.close()
                 
                 except Exception as e:
                     st.error(f"❌ Error loading file: {str(e)}")

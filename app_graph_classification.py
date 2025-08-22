@@ -1622,15 +1622,12 @@ def main():
                     # Count successful predictions
                     successful = sum(1 for p in predictions if p["Probability"] != "Failed")
                     failed = len(predictions) - successful
-                    active_count = sum(1 for p in predictions if p["Prediction"] == "Active")
                     
                     st.success(f"""
                     **Results Summary:**
                     - **Total Predictions:** {len(predictions)}
                     - **Successful:** {successful}
                     - **Failed:** {failed}
-                    - **Predicted Active:** {active_count}
-                    - **Predicted Inactive:** {successful - active_count}
                     """)
                     
                     st.dataframe(results_df, use_container_width=True)

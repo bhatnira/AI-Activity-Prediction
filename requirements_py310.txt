@@ -1,0 +1,27 @@
+# Python 3.10 Compatible Requirements
+# Core packages
+numpy==1.24.3
+pandas==2.0.3
+matplotlib==3.7.2
+seaborn==0.12.2
+streamlit==1.25.0
+
+# Chemistry packages
+rdkit==2023.3.2
+
+# Machine Learning (compatible versions for Python 3.10)
+scikit-learn==1.3.0
+tensorflow==2.13.0
+protobuf==3.20.3
+
+# DeepChem (compatible with TensorFlow 2.13)
+deepchem==2.7.1
+
+# Additional dependencies
+Pillow==10.0.0
+openpyxl==3.1.2
+xlrd==2.0.1
+
+# Optional performance improvements
+h5py==3.9.0
+joblib==1.3.2
